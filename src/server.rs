@@ -131,7 +131,11 @@ async fn pause_mapping(
 ) -> Result<Json<Mapping>, (StatusCode, String)> {
     match state.manager.pause_mapping(&id).await {
         Ok(_) => {
-            let mapping = state.manager.get_mapping(&id).await.unwrap();
+            let mapping = state
+                .manager
+                .get_mapping(&id)
+                .await
+                .ok_or((StatusCode::NOT_FOUND, "Mapping not found".to_string()))?;
             Ok(Json(mapping))
         }
         Err(e) => Err((StatusCode::NOT_FOUND, e.to_string())),
@@ -145,7 +149,11 @@ async fn resume_mapping(
 ) -> Result<Json<Mapping>, (StatusCode, String)> {
     match state.manager.resume_mapping(&id).await {
         Ok(_) => {
-            let mapping = state.manager.get_mapping(&id).await.unwrap();
+            let mapping = state
+                .manager
+                .get_mapping(&id)
+                .await
+                .ok_or((StatusCode::NOT_FOUND, "Mapping not found".to_string()))?;
             Ok(Json(mapping))
         }
         Err(e) => Err((StatusCode::NOT_FOUND, e.to_string())),

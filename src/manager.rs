@@ -64,8 +64,12 @@ impl MappingManager {
             mappings.insert(id, mapping.clone());
         }
 
-        // Start the refresh task
-        self.start_refresh_task(mapping).await?;
+        // Start the refresh task - if this fails, remove the mapping
+        if let Err(e) = self.start_refresh_task(mapping).await {
+            let mut mappings = self.mappings.write().await;
+            mappings.remove(&id);
+            return Err(e);
+        }
 
         Ok(id)
     }
