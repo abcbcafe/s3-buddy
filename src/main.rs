@@ -19,7 +19,10 @@ async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 4 {
         eprintln!("Usage: {} <s3-url> <short-url> <hosted-zone-id>", args[0]);
-        eprintln!("Example: {} s3://my-bucket/file.txt short.example.com Z1234567890ABC", args[0]);
+        eprintln!(
+            "Example: {} s3://my-bucket/file.txt short.example.com Z1234567890ABC",
+            args[0]
+        );
         std::process::exit(1);
     }
 
@@ -28,8 +31,8 @@ async fn main() -> Result<()> {
     let hosted_zone_id = args[3].clone();
 
     // Create configuration
-    let config = Config::new(s3_url, short_url, hosted_zone_id)
-        .context("Failed to create configuration")?;
+    let config =
+        Config::new(s3_url, short_url, hosted_zone_id).context("Failed to create configuration")?;
 
     info!("Configuration loaded: {:?}", config);
 

@@ -70,11 +70,9 @@ impl Route53Client {
 
     /// Extract hostname from presigned URL for CNAME target
     fn extract_hostname(url: &str) -> Result<String> {
-        let parsed = url::Url::parse(url)
-            .context("Failed to parse presigned URL")?;
+        let parsed = url::Url::parse(url).context("Failed to parse presigned URL")?;
 
-        let host = parsed.host_str()
-            .context("No hostname in presigned URL")?;
+        let host = parsed.host_str().context("No hostname in presigned URL")?;
 
         // CNAME records need a trailing dot
         Ok(format!("{}.", host))

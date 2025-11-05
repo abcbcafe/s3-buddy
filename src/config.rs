@@ -17,11 +17,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(
-        s3_url: String,
-        short_url: String,
-        hosted_zone_id: String,
-    ) -> Result<Self> {
+    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String) -> Result<Self> {
         if !s3_url.starts_with("s3://") {
             anyhow::bail!("S3 URL must start with s3://");
         }
@@ -37,7 +33,9 @@ impl Config {
 
     /// Parse S3 URL into bucket and key
     pub fn parse_s3_url(&self) -> Result<(String, String)> {
-        let url = self.s3_url.strip_prefix("s3://")
+        let url = self
+            .s3_url
+            .strip_prefix("s3://")
             .context("Invalid S3 URL format")?;
 
         let parts: Vec<&str> = url.splitn(2, '/').collect();

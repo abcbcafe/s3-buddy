@@ -15,11 +15,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn new(
-        s3_client: S3Client,
-        route53_client: Route53Client,
-        config: Config,
-    ) -> Self {
+    pub fn new(s3_client: S3Client, route53_client: Route53Client, config: Config) -> Self {
         Self {
             s3_client: Arc::new(s3_client),
             route53_client: Arc::new(route53_client),

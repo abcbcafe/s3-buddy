@@ -26,8 +26,8 @@ impl S3Client {
             bucket, key, duration
         );
 
-        let presigning_config = PresigningConfig::expires_in(duration)
-            .context("Failed to create presigning config")?;
+        let presigning_config =
+            PresigningConfig::expires_in(duration).context("Failed to create presigning config")?;
 
         let presigned_request = self
             .client
