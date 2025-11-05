@@ -67,21 +67,52 @@ impl FormState {
     }
 
     fn to_request(&self) -> Result<CreateMappingRequest> {
+        // Validate required fields
+        if self.s3_url.trim().is_empty() {
+            anyhow::bail!("S3 URL is required");
+        }
+        if self.short_url.trim().is_empty() {
+            anyhow::bail!("Short URL is required");
+        }
+        if self.hosted_zone_id.trim().is_empty() {
+            anyhow::bail!("Hosted Zone ID is required");
+        }
+
+        // Validate S3 URL format
+        if !self.s3_url.trim().starts_with("s3://") {
+            anyhow::bail!("S3 URL must start with s3://");
+        }
+
+        // Validate numeric fields
         let presign_duration_secs = self
             .presign_duration_hours
             .parse::<u64>()
-            .map_err(|_| anyhow::anyhow!("Invalid presign duration"))?
+            .map_err(|_| anyhow::anyhow!("Invalid presign duration (must be a number)"))?
             * 3600;
+
+        if presign_duration_secs == 0 {
+            anyhow::bail!("Presign duration must be greater than 0");
+        }
+
         let refresh_interval_secs = self
             .refresh_interval_hours
             .parse::<u64>()
-            .map_err(|_| anyhow::anyhow!("Invalid refresh interval"))?
+            .map_err(|_| anyhow::anyhow!("Invalid refresh interval (must be a number)"))?
             * 3600;
 
+        if refresh_interval_secs == 0 {
+            anyhow::bail!("Refresh interval must be greater than 0");
+        }
+
+        // Validate that refresh interval is less than presign duration
+        if refresh_interval_secs >= presign_duration_secs {
+            anyhow::bail!("Refresh interval must be less than presign duration");
+        }
+
         Ok(CreateMappingRequest {
-            s3_url: self.s3_url.clone(),
-            short_url: self.short_url.clone(),
-            hosted_zone_id: self.hosted_zone_id.clone(),
+            s3_url: self.s3_url.trim().to_string(),
+            short_url: self.short_url.trim().to_string(),
+            hosted_zone_id: self.hosted_zone_id.trim().to_string(),
             presign_duration_secs,
             refresh_interval_secs,
         })
@@ -473,22 +504,26 @@ async fn handle_dashboard_input(
         KeyCode::Up | KeyCode::Char('k') => app.previous_row(),
         KeyCode::Char('a') => {
             app.form_state.clear();
+            app.status_message = None;
             app.current_view = View::AddMapping;
         }
         KeyCode::Char('e') => {
             if let Some(mapping) = app.selected_mapping().cloned() {
                 let id = mapping.id;
                 app.form_state.populate_from_mapping(&mapping);
+                app.status_message = None;
                 app.current_view = View::EditMapping(id);
             }
         }
         KeyCode::Char('d') => {
-            if let Some(mapping) = app.selected_mapping() {
+            if let Some(mapping) = app.selected_mapping().cloned() {
+                app.status_message = None;
                 app.current_view = View::DeleteConfirm(mapping.id);
             }
         }
         KeyCode::Char('p') => {
-            if let Some(mapping) = app.selected_mapping() {
+            app.status_message = None;
+            if let Some(mapping) = app.selected_mapping().cloned() {
                 let id = mapping.id;
                 if mapping.status == MappingStatus::Paused {
                     resume_mapping(app, id).await?;
@@ -498,9 +533,15 @@ async fn handle_dashboard_input(
             }
         }
         KeyCode::Char('r') => {
-            fetch_mappings(app).await?;
+            app.status_message = None;
+            if let Err(e) = fetch_mappings(app).await {
+                app.status_message = Some(format!("Error refreshing: {}", e));
+            } else {
+                app.status_message = Some("Mappings refreshed".to_string());
+            }
         }
         KeyCode::Char('?') => {
+            app.status_message = None;
             app.current_view = View::Help;
         }
         _ => {}
@@ -513,6 +554,7 @@ async fn handle_form_input(app: &mut App, key: KeyCode, modifiers: KeyModifiers)
         KeyCode::Esc => {
             app.current_view = View::Dashboard;
             app.form_state.clear();
+            app.status_message = None;
         }
         KeyCode::Tab => {
             if modifiers.contains(KeyModifiers::SHIFT) {
@@ -591,6 +633,7 @@ async fn handle_delete_confirm_input(app: &mut App, key: KeyCode) -> Result<()> 
         }
         KeyCode::Char('n') | KeyCode::Esc => {
             app.current_view = View::Dashboard;
+            app.status_message = None;
         }
         _ => {}
     }
