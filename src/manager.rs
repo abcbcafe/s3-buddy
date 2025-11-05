@@ -14,12 +14,14 @@ use crate::types::{Mapping, MappingStatus, RefreshLog};
 pub struct MappingManager {
     mappings: Arc<RwLock<HashMap<Uuid, Mapping>>>,
     route53_client: Arc<Route53Client>,
+    proxy_hostname: String,
     log_tx: mpsc::UnboundedSender<RefreshLog>,
 }
 
 impl MappingManager {
     pub fn new(
         route53_client: Route53Client,
+        proxy_hostname: String,
     ) -> (Self, mpsc::UnboundedReceiver<RefreshLog>) {
         let (log_tx, log_rx) = mpsc::unbounded_channel();
 
@@ -27,6 +29,7 @@ impl MappingManager {
             Self {
                 mappings: Arc::new(RwLock::new(HashMap::new())),
                 route53_client: Arc::new(route53_client),
+                proxy_hostname,
                 log_tx,
             },
             log_rx,
@@ -39,7 +42,7 @@ impl MappingManager {
         let id = mapping.id;
         info!(
             "Adding mapping: {} -> {} (proxy: {})",
-            mapping.s3_url, mapping.short_url, mapping.proxy_hostname
+            mapping.s3_url, mapping.short_url, self.proxy_hostname
         );
 
         // Validate S3 URL format
@@ -52,7 +55,7 @@ impl MappingManager {
             .configure_dns_for_proxy(
                 &mapping.hosted_zone_id,
                 &mapping.short_url,
-                &mapping.proxy_hostname,
+                &self.proxy_hostname,
             )
             .await
             .context("Failed to configure DNS")?;
@@ -99,14 +102,13 @@ impl MappingManager {
         let old_mapping = self.get_mapping(id).await.context("Mapping not found")?;
 
         if old_mapping.short_url != updates.short_url
-            || old_mapping.proxy_hostname != updates.proxy_hostname
             || old_mapping.hosted_zone_id != updates.hosted_zone_id
         {
             self.route53_client
                 .configure_dns_for_proxy(
                     &updates.hosted_zone_id,
                     &updates.short_url,
-                    &updates.proxy_hostname,
+                    &self.proxy_hostname,
                 )
                 .await
                 .context("Failed to update DNS configuration")?;

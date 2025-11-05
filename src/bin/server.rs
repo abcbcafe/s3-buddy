@@ -15,6 +15,15 @@ async fn main() -> Result<()> {
 
     info!("Starting S3 Buddy Server");
 
+    // Get proxy hostname from environment (required)
+    let proxy_hostname = std::env::var("PROXY_HOSTNAME").unwrap_or_else(|_| {
+        eprintln!("ERROR: PROXY_HOSTNAME environment variable is required");
+        eprintln!("Example: PROXY_HOSTNAME=proxy.example.com");
+        std::process::exit(1);
+    });
+
+    info!("Proxy hostname: {}", proxy_hostname);
+
     // Load AWS configuration
     let aws_config = aws_config::load_from_env().await;
 
@@ -24,7 +33,7 @@ async fn main() -> Result<()> {
     let route53_client = Route53Client::new(aws_sdk_route53::Client::new(&aws_config));
 
     // Create mapping manager
-    let (manager, mut log_rx) = MappingManager::new(route53_client);
+    let (manager, mut log_rx) = MappingManager::new(route53_client, proxy_hostname);
     let manager = Arc::new(manager);
 
     // Spawn task to handle logs

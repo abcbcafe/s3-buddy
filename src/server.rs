@@ -75,7 +75,7 @@ async fn create_mapping(
     State(state): State<AppState>,
     Json(req): Json<CreateMappingRequest>,
 ) -> Result<Json<Mapping>, (StatusCode, String)> {
-    let mut mapping = Mapping::new(req.s3_url, req.short_url, req.hosted_zone_id, req.proxy_hostname);
+    let mut mapping = Mapping::new(req.s3_url, req.short_url, req.hosted_zone_id);
     mapping.presign_duration_secs = req.presign_duration_secs;
 
     match state.manager.add_mapping(mapping.clone()).await {
@@ -106,9 +106,6 @@ async fn update_mapping(
     }
     if let Some(hosted_zone_id) = req.hosted_zone_id {
         mapping.hosted_zone_id = hosted_zone_id;
-    }
-    if let Some(proxy_hostname) = req.proxy_hostname {
-        mapping.proxy_hostname = proxy_hostname;
     }
     if let Some(presign_duration_secs) = req.presign_duration_secs {
         mapping.presign_duration_secs = presign_duration_secs;

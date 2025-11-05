@@ -15,8 +15,6 @@ pub struct Mapping {
     pub short_url: String,
     /// Route53 hosted zone ID
     pub hosted_zone_id: String,
-    /// Proxy server hostname that handles requests (e.g., proxy.example.com)
-    pub proxy_hostname: String,
     /// Current status of the mapping
     pub status: MappingStatus,
     /// Presigned URL duration in seconds (default: 5 minutes)
@@ -38,14 +36,13 @@ fn default_presign_duration() -> u64 {
 }
 
 impl Mapping {
-    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String, proxy_hostname: String) -> Self {
+    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             s3_url,
             short_url,
             hosted_zone_id,
-            proxy_hostname,
             status: MappingStatus::Pending,
             presign_duration_secs: default_presign_duration(),
             created_at: now,
@@ -108,7 +105,6 @@ pub struct CreateMappingRequest {
     pub s3_url: String,
     pub short_url: String,
     pub hosted_zone_id: String,
-    pub proxy_hostname: String,
     #[serde(default = "default_presign_duration")]
     pub presign_duration_secs: u64,
 }
@@ -119,7 +115,6 @@ pub struct UpdateMappingRequest {
     pub s3_url: Option<String>,
     pub short_url: Option<String>,
     pub hosted_zone_id: Option<String>,
-    pub proxy_hostname: Option<String>,
     pub presign_duration_secs: Option<u64>,
 }
 

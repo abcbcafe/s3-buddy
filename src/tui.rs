@@ -43,7 +43,6 @@ pub struct FormState {
     pub s3_url: String,
     pub short_url: String,
     pub hosted_zone_id: String,
-    pub proxy_hostname: String,
     pub presign_duration_minutes: String,
     pub current_field: usize,
 }
@@ -54,7 +53,6 @@ impl Default for FormState {
             s3_url: String::new(),
             short_url: String::new(),
             hosted_zone_id: String::new(),
-            proxy_hostname: String::new(),
             presign_duration_minutes: "5".to_string(), // Default 5 minutes
             current_field: 0,
         }
@@ -83,11 +81,6 @@ impl FormState {
             anyhow::bail!("S3 URL must start with s3://");
         }
 
-        // Validate proxy hostname
-        if self.proxy_hostname.trim().is_empty() {
-            anyhow::bail!("Proxy hostname is required");
-        }
-
         // Validate numeric fields
         let presign_duration_secs = self
             .presign_duration_minutes
@@ -103,7 +96,6 @@ impl FormState {
             s3_url: self.s3_url.trim().to_string(),
             short_url: self.short_url.trim().to_string(),
             hosted_zone_id: self.hosted_zone_id.trim().to_string(),
-            proxy_hostname: self.proxy_hostname.trim().to_string(),
             presign_duration_secs,
         })
     }
@@ -112,7 +104,6 @@ impl FormState {
         self.s3_url = mapping.s3_url.clone();
         self.short_url = mapping.short_url.clone();
         self.hosted_zone_id = mapping.hosted_zone_id.clone();
-        self.proxy_hostname = mapping.proxy_hostname.clone();
         self.presign_duration_minutes = (mapping.presign_duration_secs / 60).to_string();
     }
 }
@@ -366,7 +357,6 @@ fn draw_form(f: &mut Frame, app: &mut App, title: &str) {
         ("S3 URL (base path)", &app.form_state.s3_url),
         ("Short URL (hostname)", &app.form_state.short_url),
         ("Hosted Zone ID", &app.form_state.hosted_zone_id),
-        ("Proxy Hostname", &app.form_state.proxy_hostname),
         (
             "Presign Duration (minutes)",
             &app.form_state.presign_duration_minutes,
@@ -584,8 +574,7 @@ async fn handle_form_input(app: &mut App, key: KeyCode, modifiers: KeyModifiers)
                 0 => &mut app.form_state.s3_url,
                 1 => &mut app.form_state.short_url,
                 2 => &mut app.form_state.hosted_zone_id,
-                3 => &mut app.form_state.proxy_hostname,
-                4 => &mut app.form_state.presign_duration_minutes,
+                3 => &mut app.form_state.presign_duration_minutes,
                 _ => return Ok(()),
             };
             field.push(c);
@@ -595,8 +584,7 @@ async fn handle_form_input(app: &mut App, key: KeyCode, modifiers: KeyModifiers)
                 0 => &mut app.form_state.s3_url,
                 1 => &mut app.form_state.short_url,
                 2 => &mut app.form_state.hosted_zone_id,
-                3 => &mut app.form_state.proxy_hostname,
-                4 => &mut app.form_state.presign_duration_minutes,
+                3 => &mut app.form_state.presign_duration_minutes,
                 _ => return Ok(()),
             };
             field.pop();
@@ -674,7 +662,6 @@ async fn update_mapping(app: &mut App, id: Uuid) -> Result<()> {
         s3_url: Some(request.s3_url),
         short_url: Some(request.short_url),
         hosted_zone_id: Some(request.hosted_zone_id),
-        proxy_hostname: Some(request.proxy_hostname),
         presign_duration_secs: Some(request.presign_duration_secs),
     };
 

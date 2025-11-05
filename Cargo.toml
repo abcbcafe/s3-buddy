@@ -11,9 +11,10 @@ path = "src/bin/server.rs"
 name = "s3-buddy-client"
 path = "src/bin/client.rs"
 
-[[bin]]
-name = "s3-buddy"
-path = "src/main.rs"
+# Legacy standalone binary removed - use s3-buddy-server instead
+# [[bin]]
+# name = "s3-buddy"
+# path = "src/main.rs"
 
 [dependencies]
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
