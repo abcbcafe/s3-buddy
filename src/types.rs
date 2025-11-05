@@ -125,3 +125,96 @@ pub struct RefreshLog {
     pub success: bool,
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mapping_new() {
+        let mapping = Mapping::new(
+            "s3://bucket/path/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        assert_eq!(mapping.s3_url, "s3://bucket/path/");
+        assert_eq!(mapping.short_url, "files.example.com");
+        assert_eq!(mapping.status, MappingStatus::Pending);
+        assert_eq!(mapping.presign_duration_secs, 300); // 5 minutes default
+    }
+
+    #[test]
+    fn test_parse_s3_url_with_path() {
+        let mapping = Mapping::new(
+            "s3://my-bucket/documents/reports/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let (bucket, key) = mapping.parse_s3_url().unwrap();
+        assert_eq!(bucket, "my-bucket");
+        assert_eq!(key, "documents/reports/");
+    }
+
+    #[test]
+    fn test_parse_s3_url_no_trailing_slash() {
+        let mapping = Mapping::new(
+            "s3://my-bucket/docs".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let (bucket, key) = mapping.parse_s3_url().unwrap();
+        assert_eq!(bucket, "my-bucket");
+        assert_eq!(key, "docs");
+    }
+
+    #[test]
+    fn test_parse_s3_url_bucket_only() {
+        let mapping = Mapping::new(
+            "s3://my-bucket".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let (bucket, key) = mapping.parse_s3_url().unwrap();
+        assert_eq!(bucket, "my-bucket");
+        assert_eq!(key, "");
+    }
+
+    #[test]
+    fn test_parse_s3_url_invalid() {
+        let mapping = Mapping::new(
+            "https://example.com/file".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        assert!(mapping.parse_s3_url().is_err());
+    }
+
+    #[test]
+    fn test_parse_s3_url_missing_prefix() {
+        let mapping = Mapping::new(
+            "bucket/key".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        assert!(mapping.parse_s3_url().is_err());
+    }
+
+    #[test]
+    fn test_presign_duration_conversion() {
+        let mut mapping = Mapping::new(
+            "s3://bucket/key".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        mapping.presign_duration_secs = 600; // 10 minutes
+        assert_eq!(mapping.presign_duration().as_secs(), 600);
+    }
+
+    #[test]
+    fn test_mapping_status_display() {
+        assert_eq!(MappingStatus::Pending.to_string(), "Pending");
+        assert_eq!(MappingStatus::Active.to_string(), "Active");
+        assert_eq!(MappingStatus::Paused.to_string(), "Paused");
+        assert_eq!(MappingStatus::Error.to_string(), "Error");
+    }
+}

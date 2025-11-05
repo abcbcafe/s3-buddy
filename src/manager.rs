@@ -131,3 +131,139 @@ impl MappingManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_manager_add_and_get_mapping() {
+        let manager = MappingManager::new();
+
+        let mapping = Mapping::new(
+            "s3://test-bucket/docs/".to_string(),
+            "docs.example.com".to_string(),
+        );
+
+        let id = manager.add_mapping(mapping.clone()).await.unwrap();
+        let retrieved = manager.get_mapping(&id).await;
+
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.s3_url, "s3://test-bucket/docs/");
+        assert_eq!(retrieved.short_url, "docs.example.com");
+        assert_eq!(retrieved.status, MappingStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn test_manager_list_mappings() {
+        let manager = MappingManager::new();
+
+        let mapping1 = Mapping::new(
+            "s3://bucket1/".to_string(),
+            "files1.example.com".to_string(),
+        );
+        let mapping2 = Mapping::new(
+            "s3://bucket2/".to_string(),
+            "files2.example.com".to_string(),
+        );
+
+        manager.add_mapping(mapping1).await.unwrap();
+        manager.add_mapping(mapping2).await.unwrap();
+
+        let mappings = manager.list_mappings().await;
+        assert_eq!(mappings.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_manager_update_mapping() {
+        let manager = MappingManager::new();
+
+        let mapping = Mapping::new(
+            "s3://test-bucket/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let id = manager.add_mapping(mapping).await.unwrap();
+
+        // Update the mapping
+        let mut updated = manager.get_mapping(&id).await.unwrap();
+        updated.presign_duration_secs = 900;
+
+        manager.update_mapping(&id, updated).await.unwrap();
+
+        let retrieved = manager.get_mapping(&id).await.unwrap();
+        assert_eq!(retrieved.presign_duration_secs, 900);
+    }
+
+    #[tokio::test]
+    async fn test_manager_pause_resume() {
+        let manager = MappingManager::new();
+
+        let mapping = Mapping::new(
+            "s3://test-bucket/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let id = manager.add_mapping(mapping).await.unwrap();
+
+        // Pause
+        manager.pause_mapping(&id).await.unwrap();
+        let retrieved = manager.get_mapping(&id).await.unwrap();
+        assert_eq!(retrieved.status, MappingStatus::Paused);
+
+        // Resume
+        manager.resume_mapping(&id).await.unwrap();
+        let retrieved = manager.get_mapping(&id).await.unwrap();
+        assert_eq!(retrieved.status, MappingStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn test_manager_delete_mapping() {
+        let manager = MappingManager::new();
+
+        let mapping = Mapping::new(
+            "s3://test-bucket/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let id = manager.add_mapping(mapping).await.unwrap();
+        assert!(manager.get_mapping(&id).await.is_some());
+
+        manager.delete_mapping(&id).await.unwrap();
+        assert!(manager.get_mapping(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_manager_invalid_s3_url() {
+        let manager = MappingManager::new();
+
+        let mapping = Mapping::new(
+            "https://example.com/file".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let result = manager.add_mapping(mapping).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_nonexistent() {
+        let manager = MappingManager::new();
+        let fake_id = uuid::Uuid::new_v4();
+        assert!(manager.get_mapping(&fake_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_manager_update_nonexistent() {
+        let manager = MappingManager::new();
+        let fake_id = uuid::Uuid::new_v4();
+        let mapping = Mapping::new(
+            "s3://bucket/".to_string(),
+            "files.example.com".to_string(),
+        );
+
+        let result = manager.update_mapping(&fake_id, mapping).await;
+        assert!(result.is_err());
+    }
+}
