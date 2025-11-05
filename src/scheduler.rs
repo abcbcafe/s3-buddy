@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::time::{interval, Duration};
+use tokio::time::interval;
 use tracing::{error, info, instrument};
 
 use crate::config::Config;
