@@ -45,7 +45,10 @@ impl MappingManager {
     #[instrument(skip(self))]
     pub async fn add_mapping(&self, mut mapping: Mapping) -> Result<Uuid> {
         let id = mapping.id;
-        info!("Adding mapping: {} -> {}", mapping.s3_url, mapping.short_url);
+        info!(
+            "Adding mapping: {} -> {}",
+            mapping.s3_url, mapping.short_url
+        );
 
         // Validate S3 URL format
         if !mapping.s3_url.starts_with("s3://") {
@@ -257,8 +260,9 @@ async fn refresh_url(
         match result {
             Ok(_) => {
                 stored_mapping.last_refresh = Some(Utc::now());
-                stored_mapping.next_refresh =
-                    Some(Utc::now() + chrono::Duration::from_std(mapping.refresh_interval()).unwrap());
+                stored_mapping.next_refresh = Some(
+                    Utc::now() + chrono::Duration::from_std(mapping.refresh_interval()).unwrap(),
+                );
                 stored_mapping.status = MappingStatus::Active;
                 stored_mapping.last_error = None;
 
