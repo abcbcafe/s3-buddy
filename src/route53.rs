@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
-use aws_sdk_route53::types::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType};
+use aws_sdk_route53::types::{
+    Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType,
+};
 use tracing::{info, instrument};
 
 /// Route53 client wrapper for DNS operations
@@ -79,7 +81,6 @@ impl Route53Client {
     }
 }
 
-// Add url as a dependency
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -59,7 +59,8 @@ mod tests {
             "s3://my-bucket/path/to/file.txt".to_string(),
             "short.example.com".to_string(),
             "Z1234567890ABC".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let (bucket, key) = config.parse_s3_url().unwrap();
         assert_eq!(bucket, "my-bucket");

@@ -43,14 +43,8 @@ fn test_config_defaults() {
     .unwrap();
 
     // Default presign duration should be 12 hours
-    assert_eq!(
-        config.presign_duration.as_secs(),
-        12 * 60 * 60
-    );
+    assert_eq!(config.presign_duration.as_secs(), 12 * 60 * 60);
 
     // Default refresh interval should be 11 hours
-    assert_eq!(
-        config.refresh_interval.as_secs(),
-        11 * 60 * 60
-    );
+    assert_eq!(config.refresh_interval.as_secs(), 11 * 60 * 60);
 }
