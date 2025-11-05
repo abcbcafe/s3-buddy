@@ -2,47 +2,32 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::route53::Route53Client;
-use crate::types::{Mapping, MappingStatus, RefreshLog};
+use crate::types::{Mapping, MappingStatus};
 
 /// Manages multiple URL mappings
-/// Mappings are now handled via proxy, so no periodic refresh needed
+/// Mappings are handled via HTTP proxy - users configure DNS manually
 pub struct MappingManager {
     mappings: Arc<RwLock<HashMap<Uuid, Mapping>>>,
-    route53_client: Arc<Route53Client>,
-    proxy_hostname: String,
-    log_tx: mpsc::UnboundedSender<RefreshLog>,
 }
 
 impl MappingManager {
-    pub fn new(
-        route53_client: Route53Client,
-        proxy_hostname: String,
-    ) -> (Self, mpsc::UnboundedReceiver<RefreshLog>) {
-        let (log_tx, log_rx) = mpsc::unbounded_channel();
-
-        (
-            Self {
-                mappings: Arc::new(RwLock::new(HashMap::new())),
-                route53_client: Arc::new(route53_client),
-                proxy_hostname,
-                log_tx,
-            },
-            log_rx,
-        )
+    pub fn new() -> Self {
+        Self {
+            mappings: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
-    /// Add a new mapping and configure DNS
+    /// Add a new mapping
     #[instrument(skip(self))]
     pub async fn add_mapping(&self, mut mapping: Mapping) -> Result<Uuid> {
         let id = mapping.id;
         info!(
-            "Adding mapping: {} -> {} (proxy: {})",
-            mapping.s3_url, mapping.short_url, self.proxy_hostname
+            "Adding mapping: {} -> {}",
+            mapping.s3_url, mapping.short_url
         );
 
         // Validate S3 URL format
@@ -50,18 +35,7 @@ impl MappingManager {
             anyhow::bail!("S3 URL must start with s3://");
         }
 
-        // Configure DNS to point to proxy
-        self.route53_client
-            .configure_dns_for_proxy(
-                &mapping.hosted_zone_id,
-                &mapping.short_url,
-                &self.proxy_hostname,
-            )
-            .await
-            .context("Failed to configure DNS")?;
-
         mapping.status = MappingStatus::Active;
-        mapping.dns_configured_at = Some(Utc::now());
         mapping.updated_at = Utc::now();
 
         // Store the mapping
@@ -70,13 +44,7 @@ impl MappingManager {
             mappings.insert(id, mapping.clone());
         }
 
-        // Log success
-        let _ = self.log_tx.send(RefreshLog {
-            mapping_id: id,
-            timestamp: Utc::now(),
-            success: true,
-            message: "DNS configured successfully".to_string(),
-        });
+        info!("Mapping added successfully. Configure DNS: {} CNAME → <your-server>", mapping.short_url);
 
         Ok(id)
     }
@@ -98,30 +66,19 @@ impl MappingManager {
     pub async fn update_mapping(&self, id: &Uuid, mut updates: Mapping) -> Result<()> {
         info!("Updating mapping {}", id);
 
-        // If DNS configuration has changed, update it
-        let old_mapping = self.get_mapping(id).await.context("Mapping not found")?;
-
-        if old_mapping.short_url != updates.short_url
-            || old_mapping.hosted_zone_id != updates.hosted_zone_id
-        {
-            self.route53_client
-                .configure_dns_for_proxy(
-                    &updates.hosted_zone_id,
-                    &updates.short_url,
-                    &self.proxy_hostname,
-                )
-                .await
-                .context("Failed to update DNS configuration")?;
-
-            updates.dns_configured_at = Some(Utc::now());
-        }
+        updates.updated_at = Utc::now();
 
         // Update the mapping
         {
             let mut mappings = self.mappings.write().await;
             if let Some(mapping) = mappings.get_mut(id) {
+                let old_short_url = mapping.short_url.clone();
                 *mapping = updates;
-                mapping.updated_at = Utc::now();
+
+                // Remind user to update DNS if short_url changed
+                if old_short_url != mapping.short_url {
+                    info!("Short URL changed. Update DNS: {} CNAME → <your-server>", mapping.short_url);
+                }
             } else {
                 anyhow::bail!("Mapping not found");
             }

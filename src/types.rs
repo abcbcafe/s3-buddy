@@ -11,10 +11,9 @@ pub struct Mapping {
     /// S3 URL base path (e.g., s3://bucket-name/base/path/)
     /// Request paths will be appended to this base
     pub s3_url: String,
-    /// Short URL hostname (e.g., short.example.com)
+    /// Short URL hostname (e.g., short.example.com) - used to match HTTP Host header
+    /// Users must configure DNS manually: short_url CNAME → server hostname
     pub short_url: String,
-    /// Route53 hosted zone ID
-    pub hosted_zone_id: String,
     /// Current status of the mapping
     pub status: MappingStatus,
     /// Presigned URL duration in seconds (default: 5 minutes)
@@ -25,8 +24,6 @@ pub struct Mapping {
     pub created_at: DateTime<Utc>,
     /// When this mapping was last updated
     pub updated_at: DateTime<Utc>,
-    /// When DNS was last configured
-    pub dns_configured_at: Option<DateTime<Utc>>,
     /// Last error message if any
     pub last_error: Option<String>,
 }
@@ -36,18 +33,16 @@ fn default_presign_duration() -> u64 {
 }
 
 impl Mapping {
-    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String) -> Self {
+    pub fn new(s3_url: String, short_url: String) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             s3_url,
             short_url,
-            hosted_zone_id,
             status: MappingStatus::Pending,
             presign_duration_secs: default_presign_duration(),
             created_at: now,
             updated_at: now,
-            dns_configured_at: None,
             last_error: None,
         }
     }
@@ -104,7 +99,6 @@ impl std::fmt::Display for MappingStatus {
 pub struct CreateMappingRequest {
     pub s3_url: String,
     pub short_url: String,
-    pub hosted_zone_id: String,
     #[serde(default = "default_presign_duration")]
     pub presign_duration_secs: u64,
 }
@@ -114,7 +108,6 @@ pub struct CreateMappingRequest {
 pub struct UpdateMappingRequest {
     pub s3_url: Option<String>,
     pub short_url: Option<String>,
-    pub hosted_zone_id: Option<String>,
     pub presign_duration_secs: Option<u64>,
 }
 

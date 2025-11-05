@@ -42,7 +42,6 @@ pub enum View {
 pub struct FormState {
     pub s3_url: String,
     pub short_url: String,
-    pub hosted_zone_id: String,
     pub presign_duration_minutes: String,
     pub current_field: usize,
 }
@@ -52,7 +51,6 @@ impl Default for FormState {
         Self {
             s3_url: String::new(),
             short_url: String::new(),
-            hosted_zone_id: String::new(),
             presign_duration_minutes: "5".to_string(), // Default 5 minutes
             current_field: 0,
         }
@@ -71,9 +69,6 @@ impl FormState {
         }
         if self.short_url.trim().is_empty() {
             anyhow::bail!("Short URL is required");
-        }
-        if self.hosted_zone_id.trim().is_empty() {
-            anyhow::bail!("Hosted Zone ID is required");
         }
 
         // Validate S3 URL format
@@ -95,7 +90,6 @@ impl FormState {
         Ok(CreateMappingRequest {
             s3_url: self.s3_url.trim().to_string(),
             short_url: self.short_url.trim().to_string(),
-            hosted_zone_id: self.hosted_zone_id.trim().to_string(),
             presign_duration_secs,
         })
     }
@@ -103,7 +97,6 @@ impl FormState {
     fn populate_from_mapping(&mut self, mapping: &Mapping) {
         self.s3_url = mapping.s3_url.clone();
         self.short_url = mapping.short_url.clone();
-        self.hosted_zone_id = mapping.hosted_zone_id.clone();
         self.presign_duration_minutes = (mapping.presign_duration_secs / 60).to_string();
     }
 }
@@ -251,7 +244,7 @@ fn draw_dashboard(f: &mut Frame, app: &mut App) {
     f.render_widget(title, chunks[0]);
 
     // Table
-    let header_cells = ["ID", "S3 URL", "Short URL", "Status", "DNS Configured"]
+    let header_cells = ["ID", "S3 URL", "Short URL", "Status", "Updated At"]
         .iter()
         .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
     let header = Row::new(header_cells).height(1).bottom_margin(1);
@@ -264,17 +257,14 @@ fn draw_dashboard(f: &mut Frame, app: &mut App) {
             MappingStatus::Pending => Color::Blue,
         };
 
-        let dns_configured = m
-            .dns_configured_at
-            .map(format_datetime)
-            .unwrap_or_else(|| "Not configured".to_string());
+        let updated_at = format_datetime(m.updated_at);
 
         Row::new(vec![
             Cell::from(m.id.to_string().chars().take(8).collect::<String>()),
             Cell::from(m.s3_url.clone()),
             Cell::from(m.short_url.clone()),
             Cell::from(m.status.to_string()).style(Style::default().fg(status_color)),
-            Cell::from(dns_configured),
+            Cell::from(updated_at),
         ])
     });
 
@@ -356,7 +346,6 @@ fn draw_form(f: &mut Frame, app: &mut App, title: &str) {
     let fields = [
         ("S3 URL (base path)", &app.form_state.s3_url),
         ("Short URL (hostname)", &app.form_state.short_url),
-        ("Hosted Zone ID", &app.form_state.hosted_zone_id),
         (
             "Presign Duration (minutes)",
             &app.form_state.presign_duration_minutes,
@@ -573,8 +562,7 @@ async fn handle_form_input(app: &mut App, key: KeyCode, modifiers: KeyModifiers)
             let field = match app.form_state.current_field {
                 0 => &mut app.form_state.s3_url,
                 1 => &mut app.form_state.short_url,
-                2 => &mut app.form_state.hosted_zone_id,
-                3 => &mut app.form_state.presign_duration_minutes,
+                2 => &mut app.form_state.presign_duration_minutes,
                 _ => return Ok(()),
             };
             field.push(c);
@@ -583,8 +571,7 @@ async fn handle_form_input(app: &mut App, key: KeyCode, modifiers: KeyModifiers)
             let field = match app.form_state.current_field {
                 0 => &mut app.form_state.s3_url,
                 1 => &mut app.form_state.short_url,
-                2 => &mut app.form_state.hosted_zone_id,
-                3 => &mut app.form_state.presign_duration_minutes,
+                2 => &mut app.form_state.presign_duration_minutes,
                 _ => return Ok(()),
             };
             field.pop();
@@ -661,7 +648,6 @@ async fn update_mapping(app: &mut App, id: Uuid) -> Result<()> {
     let update_request = crate::types::UpdateMappingRequest {
         s3_url: Some(request.s3_url),
         short_url: Some(request.short_url),
-        hosted_zone_id: Some(request.hosted_zone_id),
         presign_duration_secs: Some(request.presign_duration_secs),
     };
 

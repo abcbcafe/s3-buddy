@@ -1,6 +1,7 @@
 pub mod config;
 pub mod manager;
-pub mod route53;
+// Deprecated: route53 module no longer needed - users configure DNS manually
+// pub mod route53;
 pub mod s3;
 // Deprecated: scheduler module no longer used in proxy architecture
 // pub mod scheduler;
@@ -10,7 +11,7 @@ pub mod types;
 
 pub use config::Config;
 pub use manager::MappingManager;
-pub use route53::Route53Client;
+// pub use route53::Route53Client;
 pub use s3::S3Client;
 // pub use scheduler::Scheduler;
 pub use types::*;
