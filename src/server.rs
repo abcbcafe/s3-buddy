@@ -28,9 +28,7 @@ pub fn create_router(manager: Arc<MappingManager>) -> Router {
         .route("/mappings", get(list_mappings).post(create_mapping))
         .route(
             "/mappings/:id",
-            get(get_mapping)
-                .put(update_mapping)
-                .delete(delete_mapping),
+            get(get_mapping).put(update_mapping).delete(delete_mapping),
         )
         .route("/mappings/:id/pause", post(pause_mapping))
         .route("/mappings/:id/resume", post(resume_mapping))

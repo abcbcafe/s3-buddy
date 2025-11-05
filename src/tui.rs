@@ -10,9 +10,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap,
-    },
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
     Frame, Terminal,
 };
 use std::io;
@@ -89,7 +87,7 @@ impl FormState {
         })
     }
 
-    fn from_mapping(&mut self, mapping: &Mapping) {
+    fn populate_from_mapping(&mut self, mapping: &Mapping) {
         self.s3_url = mapping.s3_url.clone();
         self.short_url = mapping.short_url.clone();
         self.hosted_zone_id = mapping.hosted_zone_id.clone();
@@ -197,9 +195,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Resul
                     View::AddMapping | View::EditMapping(_) => {
                         handle_form_input(app, key.code, key.modifiers).await?
                     }
-                    View::DeleteConfirm(_) => {
-                        handle_delete_confirm_input(app, key.code).await?
-                    }
+                    View::DeleteConfirm(_) => handle_delete_confirm_input(app, key.code).await?,
                     View::Help => handle_help_input(app, key.code)?,
                 }
             }
@@ -233,7 +229,11 @@ fn draw_dashboard(f: &mut Frame, app: &mut App) {
 
     // Header
     let title = Paragraph::new("S3 Buddy - URL Mapping Manager")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(title, chunks[0]);
@@ -254,7 +254,7 @@ fn draw_dashboard(f: &mut Frame, app: &mut App) {
 
         let last_refresh = m
             .last_refresh
-            .map(|dt| format_datetime(dt))
+            .map(format_datetime)
             .unwrap_or_else(|| "Never".to_string());
 
         Row::new(vec![
@@ -319,7 +319,11 @@ fn draw_form(f: &mut Frame, app: &mut App, title: &str) {
 
     // Title
     let title_widget = Paragraph::new(title)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(title_widget, chunks[0]);
@@ -341,8 +345,14 @@ fn draw_form(f: &mut Frame, app: &mut App, title: &str) {
         ("S3 URL", &app.form_state.s3_url),
         ("Short URL", &app.form_state.short_url),
         ("Hosted Zone ID", &app.form_state.hosted_zone_id),
-        ("Presign Duration (hours)", &app.form_state.presign_duration_hours),
-        ("Refresh Interval (hours)", &app.form_state.refresh_interval_hours),
+        (
+            "Presign Duration (hours)",
+            &app.form_state.presign_duration_hours,
+        ),
+        (
+            "Refresh Interval (hours)",
+            &app.form_state.refresh_interval_hours,
+        ),
     ];
 
     for (i, (label, value)) in fields.iter().enumerate() {
@@ -359,9 +369,10 @@ fn draw_form(f: &mut Frame, app: &mut App, title: &str) {
     }
 
     // Footer
-    let footer = Paragraph::new("Tab: Next field | Shift+Tab: Previous | Enter: Submit | Esc: Cancel")
-        .block(Block::default().borders(Borders::ALL))
-        .alignment(Alignment::Center);
+    let footer =
+        Paragraph::new("Tab: Next field | Shift+Tab: Previous | Enter: Submit | Esc: Cancel")
+            .block(Block::default().borders(Borders::ALL))
+            .alignment(Alignment::Center);
     f.render_widget(footer, chunks[2]);
 }
 
@@ -467,7 +478,7 @@ async fn handle_dashboard_input(
         KeyCode::Char('e') => {
             if let Some(mapping) = app.selected_mapping().cloned() {
                 let id = mapping.id;
-                app.form_state.from_mapping(&mapping);
+                app.form_state.populate_from_mapping(&mapping);
                 app.current_view = View::EditMapping(id);
             }
         }
