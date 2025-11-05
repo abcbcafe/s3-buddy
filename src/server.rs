@@ -1,27 +1,33 @@
 #[allow(unused_imports)]
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    extract::{Host, Path, Request, State},
+    http::{StatusCode, header},
+    response::{IntoResponse, Redirect, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::manager::MappingManager;
+use crate::s3::S3Client;
 use crate::types::{CreateMappingRequest, ListMappingsResponse, Mapping, UpdateMappingRequest};
 
 /// Shared application state
 #[derive(Clone)]
 pub struct AppState {
     pub manager: Arc<MappingManager>,
+    pub s3_client: Arc<S3Client>,
 }
 
 /// Create the HTTP API router
-pub fn create_router(manager: Arc<MappingManager>) -> Router {
-    let state = AppState { manager };
+pub fn create_router(manager: Arc<MappingManager>, s3_client: Arc<S3Client>) -> Router {
+    let state = AppState {
+        manager,
+        s3_client,
+    };
 
     Router::new()
         .route("/health", get(health_check))
@@ -32,6 +38,8 @@ pub fn create_router(manager: Arc<MappingManager>) -> Router {
         )
         .route("/mappings/:id/pause", post(pause_mapping))
         .route("/mappings/:id/resume", post(resume_mapping))
+        // Proxy route - must be last to catch all other requests
+        .fallback(proxy_handler)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -67,9 +75,8 @@ async fn create_mapping(
     State(state): State<AppState>,
     Json(req): Json<CreateMappingRequest>,
 ) -> Result<Json<Mapping>, (StatusCode, String)> {
-    let mut mapping = Mapping::new(req.s3_url, req.short_url, req.hosted_zone_id);
+    let mut mapping = Mapping::new(req.s3_url, req.short_url, req.hosted_zone_id, req.proxy_hostname);
     mapping.presign_duration_secs = req.presign_duration_secs;
-    mapping.refresh_interval_secs = req.refresh_interval_secs;
 
     match state.manager.add_mapping(mapping.clone()).await {
         Ok(_) => Ok(Json(mapping)),
@@ -100,11 +107,11 @@ async fn update_mapping(
     if let Some(hosted_zone_id) = req.hosted_zone_id {
         mapping.hosted_zone_id = hosted_zone_id;
     }
+    if let Some(proxy_hostname) = req.proxy_hostname {
+        mapping.proxy_hostname = proxy_hostname;
+    }
     if let Some(presign_duration_secs) = req.presign_duration_secs {
         mapping.presign_duration_secs = presign_duration_secs;
-    }
-    if let Some(refresh_interval_secs) = req.refresh_interval_secs {
-        mapping.refresh_interval_secs = refresh_interval_secs;
     }
 
     match state.manager.update_mapping(&id, mapping.clone()).await {
@@ -158,4 +165,79 @@ async fn resume_mapping(
         }
         Err(e) => Err((StatusCode::NOT_FOUND, e.to_string())),
     }
+}
+
+/// Proxy handler - generates presigned URLs on-demand and redirects
+async fn proxy_handler(
+    State(state): State<AppState>,
+    Host(hostname): Host,
+    req: Request,
+) -> Result<Response, (StatusCode, String)> {
+    let request_path = req.uri().path();
+
+    info!("Proxy request: host={}, path={}", hostname, request_path);
+
+    // Find mapping by short_url (hostname)
+    let mappings = state.manager.list_mappings().await;
+    let mapping = mappings
+        .iter()
+        .find(|m| m.short_url == hostname)
+        .ok_or_else(|| {
+            warn!("No mapping found for hostname: {}", hostname);
+            (
+                StatusCode::NOT_FOUND,
+                format!("No mapping configured for {}", hostname),
+            )
+        })?;
+
+    // Check if mapping is active
+    if mapping.status != crate::types::MappingStatus::Active {
+        warn!("Mapping {} is not active (status: {:?})", mapping.id, mapping.status);
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("Mapping is currently {}", mapping.status),
+        ));
+    }
+
+    // Parse S3 base path
+    let (bucket, base_key) = mapping.parse_s3_url().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to parse S3 URL: {}", e),
+        )
+    })?;
+
+    // Combine base path with request path
+    // Remove leading slash from request path
+    let request_path = request_path.trim_start_matches('/');
+    let full_key = if base_key.is_empty() {
+        request_path.to_string()
+    } else {
+        // Ensure base_key doesn't end with slash to avoid double slashes
+        let base = base_key.trim_end_matches('/');
+        if request_path.is_empty() {
+            base.to_string()
+        } else {
+            format!("{}/{}", base, request_path)
+        }
+    };
+
+    info!("Generating presigned URL for s3://{}/{}", bucket, full_key);
+
+    // Generate presigned URL
+    let presigned_url = state
+        .s3_client
+        .generate_presigned_url(&bucket, &full_key, mapping.presign_duration())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to generate presigned URL: {}", e),
+            )
+        })?;
+
+    info!("Redirecting to presigned URL");
+
+    // Return 302 redirect
+    Ok(Redirect::temporary(&presigned_url).into_response())
 }

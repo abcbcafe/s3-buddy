@@ -14,24 +14,24 @@ impl Route53Client {
         Self { client }
     }
 
-    /// Update or create a CNAME record pointing to the presigned URL
-    #[instrument(skip(self, presigned_url))]
-    pub async fn update_dns_record(
+    /// Create or update a CNAME record pointing to the proxy server
+    #[instrument(skip(self))]
+    pub async fn configure_dns_for_proxy(
         &self,
         hosted_zone_id: &str,
         short_url: &str,
-        presigned_url: &str,
+        proxy_hostname: &str,
     ) -> Result<()> {
         info!(
-            "Updating DNS record {} to point to presigned URL",
-            short_url
+            "Configuring DNS record {} to point to proxy {}",
+            short_url, proxy_hostname
         );
 
-        // Extract the hostname from the presigned URL
-        let target_url = Self::extract_hostname(presigned_url)?;
+        // CNAME records need a trailing dot
+        let target = format!("{}.", proxy_hostname.trim_end_matches('.'));
 
         let resource_record = ResourceRecord::builder()
-            .value(target_url)
+            .value(target)
             .build()
             .context("Failed to build resource record")?;
 
@@ -51,7 +51,7 @@ impl Route53Client {
 
         let change_batch = ChangeBatch::builder()
             .changes(change)
-            .comment("Updated by s3-buddy")
+            .comment("Configured by s3-buddy proxy")
             .build()
             .context("Failed to build change batch")?;
 
@@ -63,32 +63,15 @@ impl Route53Client {
             .await
             .context("Failed to update Route53 record")?;
 
-        info!("Successfully updated DNS record {}", short_url);
+        info!("Successfully configured DNS record {}", short_url);
 
         Ok(())
-    }
-
-    /// Extract hostname from presigned URL for CNAME target
-    fn extract_hostname(url: &str) -> Result<String> {
-        let parsed = url::Url::parse(url).context("Failed to parse presigned URL")?;
-
-        let host = parsed.host_str().context("No hostname in presigned URL")?;
-
-        // CNAME records need a trailing dot
-        Ok(format!("{}.", host))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_extract_hostname() {
-        let url = "https://my-bucket.s3.amazonaws.com/path/to/file?X-Amz-Signature=abc";
-        let hostname = Route53Client::extract_hostname(url).unwrap();
-        assert_eq!(hostname, "my-bucket.s3.amazonaws.com.");
-    }
 
     #[tokio::test]
     async fn test_route53_client_creation() {

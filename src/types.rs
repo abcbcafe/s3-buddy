@@ -8,55 +8,49 @@ use uuid::Uuid;
 pub struct Mapping {
     /// Unique identifier for this mapping
     pub id: Uuid,
-    /// S3 URL (e.g., s3://bucket-name/path/to/object)
+    /// S3 URL base path (e.g., s3://bucket-name/base/path/)
+    /// Request paths will be appended to this base
     pub s3_url: String,
     /// Short URL hostname (e.g., short.example.com)
     pub short_url: String,
     /// Route53 hosted zone ID
     pub hosted_zone_id: String,
+    /// Proxy server hostname that handles requests (e.g., proxy.example.com)
+    pub proxy_hostname: String,
     /// Current status of the mapping
     pub status: MappingStatus,
-    /// Presigned URL duration in seconds (default: 12 hours)
+    /// Presigned URL duration in seconds (default: 5 minutes)
+    /// URLs are generated on-demand, so shorter duration is more secure
     #[serde(default = "default_presign_duration")]
     pub presign_duration_secs: u64,
-    /// Refresh interval in seconds (default: 11 hours)
-    #[serde(default = "default_refresh_interval")]
-    pub refresh_interval_secs: u64,
     /// When this mapping was created
     pub created_at: DateTime<Utc>,
     /// When this mapping was last updated
     pub updated_at: DateTime<Utc>,
-    /// Last successful refresh timestamp
-    pub last_refresh: Option<DateTime<Utc>>,
-    /// Next scheduled refresh timestamp
-    pub next_refresh: Option<DateTime<Utc>>,
+    /// When DNS was last configured
+    pub dns_configured_at: Option<DateTime<Utc>>,
     /// Last error message if any
     pub last_error: Option<String>,
 }
 
 fn default_presign_duration() -> u64 {
-    12 * 60 * 60 // 12 hours
-}
-
-fn default_refresh_interval() -> u64 {
-    11 * 60 * 60 // 11 hours
+    5 * 60 // 5 minutes - shorter is more secure for on-demand generation
 }
 
 impl Mapping {
-    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String) -> Self {
+    pub fn new(s3_url: String, short_url: String, hosted_zone_id: String, proxy_hostname: String) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             s3_url,
             short_url,
             hosted_zone_id,
+            proxy_hostname,
             status: MappingStatus::Pending,
             presign_duration_secs: default_presign_duration(),
-            refresh_interval_secs: default_refresh_interval(),
             created_at: now,
             updated_at: now,
-            last_refresh: None,
-            next_refresh: None,
+            dns_configured_at: None,
             last_error: None,
         }
     }
@@ -65,8 +59,22 @@ impl Mapping {
         Duration::from_secs(self.presign_duration_secs)
     }
 
-    pub fn refresh_interval(&self) -> Duration {
-        Duration::from_secs(self.refresh_interval_secs)
+    /// Parse the S3 URL into bucket and base key path
+    pub fn parse_s3_url(&self) -> anyhow::Result<(String, String)> {
+        let url = self
+            .s3_url
+            .strip_prefix("s3://")
+            .ok_or_else(|| anyhow::anyhow!("S3 URL must start with s3://"))?;
+
+        let parts: Vec<&str> = url.splitn(2, '/').collect();
+        let bucket = parts[0].to_string();
+        let base_key = if parts.len() > 1 {
+            parts[1].to_string()
+        } else {
+            String::new()
+        };
+
+        Ok((bucket, base_key))
     }
 }
 
@@ -100,10 +108,9 @@ pub struct CreateMappingRequest {
     pub s3_url: String,
     pub short_url: String,
     pub hosted_zone_id: String,
+    pub proxy_hostname: String,
     #[serde(default = "default_presign_duration")]
     pub presign_duration_secs: u64,
-    #[serde(default = "default_refresh_interval")]
-    pub refresh_interval_secs: u64,
 }
 
 /// Request to update an existing mapping
@@ -112,8 +119,8 @@ pub struct UpdateMappingRequest {
     pub s3_url: Option<String>,
     pub short_url: Option<String>,
     pub hosted_zone_id: Option<String>,
+    pub proxy_hostname: Option<String>,
     pub presign_duration_secs: Option<u64>,
-    pub refresh_interval_secs: Option<u64>,
 }
 
 /// Response containing a list of mappings

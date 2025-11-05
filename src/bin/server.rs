@@ -20,13 +20,14 @@ async fn main() -> Result<()> {
 
     // Create AWS clients
     let s3_client = S3Client::new(aws_sdk_s3::Client::new(&aws_config));
+    let s3_client = Arc::new(s3_client);
     let route53_client = Route53Client::new(aws_sdk_route53::Client::new(&aws_config));
 
     // Create mapping manager
-    let (manager, mut log_rx) = MappingManager::new(s3_client, route53_client);
+    let (manager, mut log_rx) = MappingManager::new(route53_client);
     let manager = Arc::new(manager);
 
-    // Spawn task to handle refresh logs
+    // Spawn task to handle logs
     tokio::spawn(async move {
         while let Some(log) = log_rx.recv().await {
             if log.success {
@@ -38,7 +39,7 @@ async fn main() -> Result<()> {
     });
 
     // Create HTTP server
-    let app = s3_buddy::server::create_router(manager);
+    let app = s3_buddy::server::create_router(manager, s3_client);
 
     // Get port from environment or use default
     let port = std::env::var("PORT")
